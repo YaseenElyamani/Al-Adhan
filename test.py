@@ -3,7 +3,7 @@ import requests
 import datetime
 import time
 
-
+playsound()
 
 """
 print(time.ctime(0)) # time expressed in seconds
