@@ -38,7 +38,7 @@ class App(ctk.CTk):
         lat, lon, city, country = get_location()
         times = get_prayer_times_lat(lat, lon)
 
-        self.resizable(False, False)
+        self.resizable(True, True)
         self.title("Prayer Times")
         self.iconbitmap('images/logo.ico')
         self.geometry("900x550")
@@ -187,6 +187,7 @@ class App(ctk.CTk):
         self.time_to_prayer.configure(text=diff_formatted)
 
         self.after(1000, self.update)
+
     def play_sound_and_show_button(self):
         self.play_sound()
         self.show_button()
@@ -194,17 +195,13 @@ class App(ctk.CTk):
         jobs = self.scheduler.get_jobs()
         next_job = min(jobs, key=lambda job: self.job.next_run_time or datetime.datetime.max)
         self.next_prayer = next_job.id
-        
+
         self.next_prayer_label.configure(text=self.next_prayer)
 
     def hide_button(self):
         self.overlay_button.place_forget()
-
     def show_button(self):
         self.overlay_button.place(relx=0.79, rely=0.5, anchor="center")
-
-    def time_to_prayer():
-        return
     def play_sound(self):
         pygame.mixer.music.load("audio/The Adhan - Omar Hisham.mp3")
         pygame.mixer.music.play(loops=0)
