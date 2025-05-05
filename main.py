@@ -1,11 +1,12 @@
 import customtkinter as ctk
-from prayer import get_prayer_times, print_athan, get_prayer_times_lat
+from prayer import get_prayer_times, print_athan, get_prayer_times_lat, get_tomorrow_prayer_times_lat
 from apscheduler.schedulers.background import BackgroundScheduler
 import pygame
 from tkinter import PhotoImage
 from PIL import Image, ImageTk
 from time import *
 import datetime
+from datetime import timedelta
 from apscheduler.events import EVENT_JOB_EXECUTED, EVENT_JOB_ERROR
 import json
 import urllib3
@@ -14,6 +15,8 @@ PRAYERS = ["Fajr", "Dhuhr", "Asr", "Maghrib", "Isha"]
 ctk.set_appearance_mode("dark")
 ctk.set_default_color_theme("dark-blue")
 
+
+#Grabs location of the user, returns: lat and long, city, and country
 def get_location():
     url = 'http://ip-api.com/json'
     http = urllib3.PoolManager()
@@ -29,19 +32,25 @@ def get_location():
     return lat, lon, city.lower(), country.lower()
 
 
- # Hard code location// for testing
-
+ 
+#App using ctkinter 
 class App(ctk.CTk):
     def __init__(self):
         super().__init__()
-
+        
+        #Grab location of the user using the function get_location
         lat, lon, city, country = get_location()
         times = get_prayer_times_lat(lat, lon)
 
+        #Initializes title of app, resizability, icon and size
         self.resizable(True, True)
         self.title("Prayer Times")
         self.iconbitmap('images/logo.ico')
         self.geometry("900x550")
+
+        #Main Grid holding prayer times grid and layout/borders grid
+        self.main_grid = ctk.CTkFrame(self,width=860, height = 500, bg_color="transparent", fg_color="transparent")
+        self.main_grid.place(relx=0.5, rely=0.5, anchor="center")
 
         #rectangular border
         border = Image.open("images/border.png")
@@ -49,32 +58,45 @@ class App(ctk.CTk):
         self.border = ImageTk.PhotoImage(border)
         
         
-        self.border_label = ctk.CTkLabel(self, image=self.border, text="")
-        self.border_label.place(relx=0.5, rely=0.5, anchor="center")  # Position the image
+        self.border_label = ctk.CTkLabel(self.main_grid, image=self.border, text="")
+        #self.border_label.place(relx=0.5, rely=0.5, anchor="center")  # Position the image
+        self.border_label.grid(row=0, column=0, sticky="nsew")
 
+
+        self.circular_grid = ctk.CTkFrame(self,width=0, height = 0, bg_color="transparent", fg_color="transparent")
+        self.circular_grid.place(relx=0.79, rely=0.5, anchor="center")
         #circular border 1
         circular_border = Image.open("images/circle_border.png")
         self.circular_border = ImageTk.PhotoImage(circular_border)
         
 
-        self.circular_border_label = ctk.CTkLabel(self, image=self.circular_border, text="")
-        self.circular_border_label.place(relx=0.79, rely=0.5, anchor="center")
+        self.circular_border_label = ctk.CTkLabel(self.circular_grid, image=self.circular_border, text="")
+        #self.circular_border_label.place(relx=0.79, rely=0.5, anchor="center")
+        self.circular_border_label.grid(row=0, column=0, padx=0, sticky="")
 
         #circular border 2
         circular_border2 = circular_border.resize((195, 195))
         self.circular_border2 = ImageTk.PhotoImage(circular_border2)
 
-        self.circular_border2_label = ctk.CTkLabel(self, image=self.circular_border2, text="")
-        self.circular_border2_label.place(relx=0.79, rely=0.5, anchor="center")
+        self.circular_border2_label = ctk.CTkLabel(self.circular_grid, image=self.circular_border2, text="")
+        #self.circular_border2_label.place(relx=0.79, rely=0.5, anchor="center")
+        self.circular_border2_label.grid(row=0, column=0, padx=0, sticky="")
 
+
+        #Grid frame to hold prayer times labels
         self.grid_frame = ctk.CTkFrame(self, width=200, height=100, corner_radius=10)
         self.grid_frame.place(relx=0.05, rely=0.21)
 
         self.circle_frame = ctk.CTkFrame(self, width=100, height=100, corner_radius=10, bg_color="transparent", fg_color="transparent")
         self.circle_frame.place(relx=0.715, rely=0.43)
 
+
+        #prayer times labels put into grid frame
+
         self.title_label = ctk.CTkLabel(self.grid_frame, text="Prayer Times", font=("Itim", 36))
         self.title_label.grid(row=0, column=0,padx=80,pady=10, sticky="w", columnspan=2)
+        #self.suhoor_label = ctk.CTkLabel(self.grid_frame, text="Suhoor Time: ", font=("IstokWeb",24))
+        #self.suhoor_label.grid(row=1, column=0,padx=20,pady=10, sticky="w")
         self.fajr_label = ctk.CTkLabel(self.grid_frame, text="Fajr Time: ", font=("IstokWeb",24))
         self.fajr_label.grid(row=1, column=0,padx=20,pady=10, sticky="w")
         self.dhuhr_label = ctk.CTkLabel(self.grid_frame, text="Dhuhr Time: ", font=("IstokWeb",24))
@@ -101,14 +123,20 @@ class App(ctk.CTk):
 
         #Initialize Background Scheduler
         self.scheduler = BackgroundScheduler()
+
         #Initialize Pygame for Audio
         pygame.mixer.init()
+
         #Iterate through prayer times and add as job, as well as display prayer times
+
+        self.prayer_times_list = []  # Create a list to store labels
         i = 1
         for prayer_time, prayer in zip(times, PRAYERS):
-
+            
+            #In each iteration, split hours and minutes for each prayer time
             hour, minute = prayer_time.split(':')
 
+            #set display_hour to 12hr time 
             display_hour = f"{int(hour)}"
             if int(hour) < 12:
                 meridiem = 'AM'
@@ -118,16 +146,21 @@ class App(ctk.CTk):
                     display_hour = f"{int(hour) - 12}"
                 meridiem = 'PM'
 
+
+            #Add prayer time labels on grid frame 
             self.prayer_time_label = ctk.CTkLabel(self.grid_frame, text=f"{display_hour}:{minute} {meridiem}", font=("IstokWeb",24))
             self.prayer_time_label.grid(row=i, column=1, sticky="e", padx=30)
+            self.prayer_times_list.append(self.prayer_time_label)
 
 
-
+            run_datetime = datetime.datetime.now().replace(hour=int(hour), minute=int(minute), second=0, microsecond=0)
             # ADD JOB TO SHEDULER
-            self.scheduler.add_job(self.play_sound_and_show_button, 'cron', hour=hour, minute=minute, id=prayer)  
+            self.scheduler.add_job(self.play_sound_and_show_button, 'date', run_date=run_datetime, id=prayer)  
             #self.scheduler.add_job(self.play_sound_and_show_button, 'cron', hour=19, minute=9, second=20)
 
+            #NEED TO UNDERSTAND WHAT THIS CODE DOES, CAUSE I FORGOT, UNNECESSARY
 
+            """
             if not self.current_prayer and int(current_hour) < int(hour):
                     self.current_prayer_time = prayer_time
                     self.current_prayer = prayer
@@ -137,16 +170,24 @@ class App(ctk.CTk):
             if not self.current_prayer and i == 5:
                 self.current_prayer = PRAYERS[0]
                 self.current_prayer_time = times[0]
+            """
             i += 1
 
 
         #Start Background Scheuduler
         self.scheduler.start()
 
+        #Initialize and display next prayer label in the countdown timer to the next prayer
+        
+        self.jobs = self.scheduler.get_jobs()
+        if not self.jobs:
+            self.tomorrow_prayers()
+            self.jobs = self.scheduler.get_jobs()
 
-        self.next_prayer_label = ctk.CTkLabel(self.circle_frame, text=self.current_prayer, font=("Itim", 28), bg_color="transparent")
+        self.next_prayer_label = ctk.CTkLabel(self.circle_frame, text=self.jobs[0].id, font=("Itim", 28), bg_color="transparent")
         self.next_prayer_label.grid(row=0, column=0,padx=0,pady=0, sticky="nsew")
 
+        #Countdown timer to the next prayer
         self.time_to_prayer = ctk.CTkLabel(self.circle_frame, text=self.current_time, font=("Itim", 36), bg_color="transparent")
         self.time_to_prayer.grid(row=1, column=0,padx=0,pady=0, sticky="nsew")
 
@@ -167,37 +208,96 @@ class App(ctk.CTk):
         #self.show_button() #For testing
 
         
-        self.update()
+        self.after(1000, self.update)
 
     def update(self):
 
-        if self.next_prayer:
-            self.current_prayer = self.next_prayer
-        self.job = self.scheduler.get_job(self.current_prayer)
-        if self.job and self.job.next_run_time:
-            now = datetime.datetime.now(self.job.next_run_time.tzinfo)
-            time_diff = self.job.next_run_time - now
+        if not self.scheduler.get_jobs():
+            self.tomorrow_prayers()
 
-            total_seconds = int(time_diff.total_seconds())
-            hours, remainder = divmod(total_seconds, 3600)
-            minutes, seconds = divmod(remainder, 60)
-            diff_formatted = f"{hours:02d}:{minutes:02d}:{seconds:02d}"
+        self.jobs = self.scheduler.get_jobs()
+        current_job = self.jobs[0]
+
+        next_job = min(self.jobs, key=lambda job: job.next_run_time)
+        run_time = next_job.next_run_time
+        job_id = next_job.id.capitalize()
+
+        self.next_prayer = job_id
+        
+        now = datetime.datetime.now(run_time.tzinfo)
+        diff = (run_time - now).total_seconds()
+
+        for job in self.scheduler.get_jobs():
+            if job.next_run_time and job.next_run_time <= now:
+                self.scheduler.remove_job(job.id)
+        
+        if diff <= 0:
+            self.next_prayer_label.configure(text=self.jobs[0].id)
+        mins, secs = divmod(int(diff), 60)
+        hrs, mins = divmod(mins, 60)
+            
+            
+
+        diff_formatted = f"{hrs:02}:{mins:02}:{secs:02}"
+        self.time_to_prayer.configure(text=diff_formatted)
+        self.next_prayer_label.configure(text=current_job.id)
+
+        self.after(1000, self.update)
+
+
+
+        """
+        self.job = self.scheduler.get_job(self.current_prayer)
+        jobs = self.scheduler.get_jobs()
+        self.next_prayer = min(jobs, key=lambda job: self.job.next_run_time)
+
+
+        
+        now = datetime.datetime.now(self.job.next_run_time.tzinfo)
+        time_diff = self.job.next_run_time - now
+
+        total_seconds = int(time_diff.total_seconds())
+        hours, remainder = divmod(total_seconds, 3600)
+        minutes, seconds = divmod(remainder, 60)
+        diff_formatted = f"{hours:02d}:{minutes:02d}:{seconds:02d}"
             
 
         self.time_to_prayer.configure(text=diff_formatted)
 
         self.after(1000, self.update)
+        """
+
+    def tomorrow_prayers(self):
+        lat, lon, city, country = get_location()
+        tmrw_times = get_tomorrow_prayer_times_lat(lat, lon)
+
+        i = 0
+        for time, prayer in zip(tmrw_times, PRAYERS):
+            hour, minute = time.split(":")
+
+            #set display_hour to 12hr time 
+            display_hour = f"{int(hour)}"
+            if int(hour) < 12:
+                meridiem = 'AM'
+                
+            else:
+                if int(hour) > 12:
+                    display_hour = f"{int(hour) - 12}"
+                meridiem = 'PM'
+
+            self.prayer_times_list[i].configure(text = f"{display_hour}:{minute} {meridiem}")
+
+            run_datetime = (datetime.datetime.now() + timedelta(days=1)).replace(hour=int(hour), minute=int(minute), second=0, microsecond=0)
+            self.scheduler.add_job(self.play_sound_and_show_button, 'date', run_date=run_datetime, id=prayer)
+
+
 
     def play_sound_and_show_button(self):
         self.play_sound()
         self.show_button()
+ 
 
-        jobs = self.scheduler.get_jobs()
-        next_job = min(jobs, key=lambda job: self.job.next_run_time or datetime.datetime.max)
-        self.next_prayer = next_job.id
-
-        self.next_prayer_label.configure(text=self.next_prayer)
-
+        
     def hide_button(self):
         self.overlay_button.place_forget()
     def show_button(self):
