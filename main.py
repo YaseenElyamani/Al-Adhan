@@ -401,9 +401,8 @@ class App(ctk.CTk):
             run_datetime = datetime.datetime.now().replace(hour=int(hour), minute=int(minute), second=0, microsecond=0)
             
             # ADD JOB TO SCHEDULER
-            self.scheduler.add_job(self.play_sound_and_show_button, 'date', run_date=run_datetime, id=prayer)  
+            self.scheduler.add_job(self.play_sound_and_show_button, 'date', run_date=run_datetime, id=prayer, misfire_grace_time=300)  
             #self.scheduler.add_job(self.play_sound_and_show_button, 'cron', hour=19, minute=9, second=20)
-    
             
             i += 1
     
@@ -417,13 +416,21 @@ class App(ctk.CTk):
         self.scheduler_setup()
 
     def handle_sleep_resume(self):
-        time_now = datetime.datetime.now()
+        try:
+            self.scheduler.pause()
+            self.scheduler.resume()
+        except Exception as e:
+            print("Scheduler reset failed:", e)
 
         for job in self.scheduler.get_jobs():
-            if job.next_run_time and job.next_run_time < time_now:
-                self.scheduler.remove_job(job.id)
-                break
+            if job.next_run_time:
+                time_now = datetime.datetime.now(job.next_run_time.tzinfo)
+                delay = (time_now - job.next_run_time).total_seconds()
 
+                # Only remove if the prayer was ACTUALLY missed
+                if delay > 60:
+                    self.scheduler.remove_job(job.id)
+                    break
 
     def update(self):
         
@@ -444,7 +451,7 @@ class App(ctk.CTk):
         now = datetime.datetime.now(run_time.tzinfo)
 
         time_now = datetime.datetime.now()
-        if (time_now - self.last_checked).total_seconds() > 120:
+        if (time_now - self.last_checked).total_seconds() > 5:
             self.handle_sleep_resume()
 
         self.last_checked = time_now
