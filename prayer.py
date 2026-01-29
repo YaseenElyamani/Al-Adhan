@@ -109,7 +109,3 @@ def print_athan(times):
     print(f"Isha Time: {times[4]}")
 
     return
-
-times = get_tomrrow_prayer_times("Waterloo", "Canada")
-
-print_athan(times)

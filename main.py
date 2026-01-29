@@ -11,6 +11,21 @@ from datetime import timedelta
 from apscheduler.events import EVENT_JOB_EXECUTED, EVENT_JOB_ERROR
 import json
 import urllib3
+import sys
+import ctypes
+
+def single_instance():
+    mutex = ctypes.windll.kernel32.CreateMutexW(
+        None,
+        False,
+        "Global\\PrayerTimesAppMutex"
+    )
+
+    if ctypes.windll.kernel32.GetLastError() == 183:
+        # App is already running
+        sys.exit(0)
+
+single_instance()
 
 PRAYERS = ["Fajr", "Dhuhr", "Asr", "Maghrib", "Isha"]
 ctk.set_appearance_mode("dark")
@@ -39,10 +54,17 @@ class App(ctk.CTk):
     def __init__(self):
         super().__init__()
 
+        #Initializes title of app, resizability, icon and size
+        self.resizable(False, False)
+        self.title("Prayer Times")
+        self.iconbitmap('images/logo.ico')
+        self.geometry("900x550")
+
     
         #Initialize Background Scheduler
         pygame.mixer.init()
         self.scheduler = BackgroundScheduler()
+        self.last_checked = datetime.datetime.now()
         self.load_settings()
         self.scheduler.start()
         self.prayers_setup()
@@ -50,13 +72,7 @@ class App(ctk.CTk):
         self.border()
         self.label_grid()
         self.scheduler_setup()
-        self.setup_window()
         self.timer()
-        
-        
-        
-        
-        
         
         #self.debug_trigger_prayers()
         #self.debug_tomorrow_prayers()
@@ -109,14 +125,25 @@ class App(ctk.CTk):
         
         self.after(1000, self.update)
     def load_settings(self):
-            try:
-                with open("settings.json", "r") as f:
+        try:
+            with open("settings.json", "r") as f:
+                try:
                     data = json.load(f)
-                    self.city = data.get("city", "")
-                    self.country = data.get("country", "")
-            except FileNotFoundError:
-                self.city = ""
-                self.country = ""
+                except json.JSONDecodeError:
+                    # File exists but empty or invalid JSON
+                    data = {}
+                
+                self.city = data.get("city", "")
+                self.country = data.get("country", "")
+        except FileNotFoundError:
+            # File doesn't exist
+            self.city = ""
+            self.country = ""
+
+        # If settings are empty, open the settings window
+        if not self.city or not self.country:
+            self.after(100, self.open_settings)
+
 
     def create_tray_icon(self):
         """Create tray icon once and keep it hidden initially"""
@@ -171,9 +198,12 @@ class App(ctk.CTk):
 
 
     def open_settings(self):
+
         settings_window = ctk.CTkToplevel(self)
         settings_window.title("Settings")
         settings_window.geometry("400x300")
+        settings_window.iconbitmap("images/settings.ico")
+        settings_window.resizable(False, False)
 
         # Force it to the front
         settings_window.transient(self)     # tie it to main window
@@ -182,16 +212,14 @@ class App(ctk.CTk):
         settings_window.focus_force()         # keyboard focus
 
 
-
         #Grid Label
-        location_label = ctk.CTkLabel(settings_window, text="Location Settings")
-        location_label.pack()
+        location_label = ctk.CTkLabel(settings_window, text="Location Settings", font=("Itim", 24, "bold"))
+        location_label.pack(pady=(80,0))
 
         
         #Grid Frame
         location_frame = ctk.CTkFrame(settings_window)
         location_frame.pack(expand=True, padx=0,pady=0)
-
         location_frame.grid_columnconfigure(0, weight=0)
 
         country_label = ctk.CTkLabel(location_frame, text="Enter Country:")
@@ -235,12 +263,7 @@ class App(ctk.CTk):
 
 
 
-    #Initializes title of app, resizability, icon and size
-    def setup_window(self):
-        self.resizable(True, True)
-        self.title("Prayer Times")
-        self.iconbitmap('images/logo.ico')
-        self.geometry("900x550")
+    
 
     
 
@@ -393,6 +416,15 @@ class App(ctk.CTk):
 
         self.scheduler_setup()
 
+    def handle_sleep_resume(self):
+        time_now = datetime.datetime.now()
+
+        for job in self.scheduler.get_jobs():
+            if job.next_run_time and job.next_run_time < time_now:
+                self.scheduler.remove_job(job.id)
+                break
+
+
     def update(self):
         
         
@@ -410,6 +442,13 @@ class App(ctk.CTk):
         self.next_prayer = job_id
         
         now = datetime.datetime.now(run_time.tzinfo)
+
+        time_now = datetime.datetime.now()
+        if (time_now - self.last_checked).total_seconds() > 120:
+            self.handle_sleep_resume()
+
+        self.last_checked = time_now
+
         diff = (run_time - now).total_seconds()
 
         for job in self.scheduler.get_jobs():
