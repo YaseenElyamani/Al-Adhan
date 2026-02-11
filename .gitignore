@@ -1,0 +1,23 @@
+# Python compiled files
+__pycache__/
+*.pyc
+
+# Virtual environment folder
+venv/
+env/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Settings / credentials
+settings.json
+
+# PyInstaller / build output (if packaging)
+dist/
+build/
+*.exe
+
+# Audio or media files you don’t want in Git
+audio/
+images/

@@ -73,7 +73,12 @@ def get_location():
 
     return lat, lon, city.lower(), country.lower()
 
-
+def format_12hr(hour, minute):
+    meridiem = "AM" if hour < 12 else "PM"
+    display_hour = hour % 12
+    if display_hour == 0:
+        display_hour = 12
+    return f"{display_hour}:{minute} {meridiem}"
  
 #App using ctkinter 
 class App(ctk.CTk):
@@ -422,19 +427,8 @@ class App(ctk.CTk):
             #In each iteration, split hours and minutes for each prayer time
             hour, minute = prayer_time.split(':')
 
-            #set display_hour to 12hr time 
-            display_hour = f"{int(hour)}"
-            if int(hour) < 12:
-                meridiem = 'AM'
-                
-            else:
-                if int(hour) > 12:
-                    display_hour = f"{int(hour) - 12}"
-                meridiem = 'PM'
-
-
             #Add prayer time labels on grid frame 
-            self.prayer_time_label = ctk.CTkLabel(self.grid_frame, text=f"{display_hour}:{minute} {meridiem}", font=("IstokWeb",24))
+            self.prayer_time_label = ctk.CTkLabel(self.grid_frame, text=format_12hr(int(hour), minute), font=("IstokWeb", 24))
             self.prayer_time_label.grid(row=i, column=1, sticky="e", padx=30)
             self.prayer_times_list.append(self.prayer_time_label)
 
@@ -442,7 +436,7 @@ class App(ctk.CTk):
             run_datetime = datetime.datetime.now().replace(hour=int(hour), minute=int(minute), second=0, microsecond=0)
             
             # ADD JOB TO SCHEDULER
-            self.scheduler.add_job(self.play_sound_and_show_button, 'date', run_date=run_datetime, id=prayer, misfire_grace_time=300)  
+            self.scheduler.add_job(self.play_sound_and_show_button, 'date', run_date=run_datetime, id=prayer, misfire_grace_time=180)  
             #self.scheduler.add_job(self.play_sound_and_show_button, 'cron', hour=19, minute=9, second=20)
             
             i += 1
@@ -490,7 +484,7 @@ class App(ctk.CTk):
         now = datetime.datetime.now(run_time.tzinfo)
 
         time_now = datetime.datetime.now()
-        if (time_now - self.last_checked).total_seconds() > 180:
+        if (time_now - self.last_checked).total_seconds() > 300:
             self.handle_sleep_resume()
 
         self.last_checked = time_now
@@ -545,25 +539,25 @@ class App(ctk.CTk):
         else:
             self.times = get_tomorrow_prayer_times_lat(lat, lon)
 
-        i = 0
-        for time, prayer in zip(self.times, PRAYERS):
-            hour, minute = time.split(":")
+        for i, (time, prayer) in enumerate(zip(self.times, PRAYERS)):
+            hour, minute = map(int, time.split(":"))
 
-            #set display_hour to 12hr time 
-            display_hour = f"{int(hour)}"
-            if int(hour) < 12:
-                meridiem = 'AM'
-                
-            else:
-                if int(hour) > 12:
-                    display_hour = f"{int(hour) - 12}"
-                meridiem = 'PM'
+            # Correct 12-hour formatting
+            formatted_time = format_12hr(hour, f"{minute:02}")
 
-            self.prayer_times_list[i].configure(text = f"{display_hour}:{minute} {meridiem}")
+            # Update label text
+            self.prayer_times_list[i].configure(text=formatted_time)
 
-            run_datetime = (datetime.datetime.now() + timedelta(days=1)).replace(hour=int(hour), minute=int(minute), second=0, microsecond=0)
-            self.scheduler.add_job(self.play_sound_and_show_button, 'date', run_date=run_datetime, id=prayer)
-
+            # Schedule job for tomorrow
+            run_datetime = (datetime.datetime.now() + timedelta(days=1)).replace(
+                hour=hour, minute=minute, second=0, microsecond=0
+            )
+            self.scheduler.add_job(
+                self.play_sound_and_show_button,
+                'date',
+                run_date=run_datetime,
+                id=prayer
+            )
 
     def play_sound_and_show_button(self):
         # Restore the window if it's minimized
