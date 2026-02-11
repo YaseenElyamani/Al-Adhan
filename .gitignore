@@ -18,6 +18,7 @@ dist/
 build/
 *.exe
 
-# Audio or media files you don’t want in Git
-audio/
-images/
+main.spec
+hello.py
+
+tkinter learn/
