@@ -13,6 +13,32 @@ import json
 import urllib3
 import sys
 import ctypes
+import os
+import sys
+import winreg
+
+
+
+def add_to_startup():
+    # Get the path to the Python executable and the script
+    python_exe = sys.executable
+    script_path = os.path.abspath(__file__)
+
+    # Registry path for current user startup
+    key = winreg.HKEY_CURRENT_USER
+    reg_path = r"Software\Microsoft\Windows\CurrentVersion\Run"
+
+    # Name your app in the registry
+    name = "PrayerTimesApp"
+    value = f'"{python_exe}" "{script_path}"'
+
+    try:
+        registry_key = winreg.OpenKey(key, reg_path, 0, winreg.KEY_SET_VALUE)
+        winreg.SetValueEx(registry_key, name, 0, winreg.REG_SZ, value)
+        winreg.CloseKey(registry_key)
+        print("Added to startup successfully!")
+    except Exception as e:
+        print("Failed to add to startup:", e)
 
 def single_instance():
     mutex = ctypes.windll.kernel32.CreateMutexW(
@@ -54,6 +80,8 @@ class App(ctk.CTk):
     def __init__(self):
         super().__init__()
 
+        self.check_startup()
+
         #Initializes title of app, resizability, icon and size
         self.resizable(False, False)
         self.title("Prayer Times")
@@ -82,7 +110,20 @@ class App(ctk.CTk):
         self.create_tray_icon()
         self.protocol("WM_DELETE_WINDOW", self.minimize_to_tray)  # intercept close button
 
-    
+    def check_startup(self):
+        # Load settings.json
+        try:
+            with open("settings.json", "r") as f:
+                data = json.load(f)
+        except:
+            data = {}
+
+        # Only add to startup if not already
+        if not data.get("startup_added"):
+            add_to_startup()
+            data["startup_added"] = True
+            with open("settings.json", "w") as f:
+                json.dump(data, f)
         
     def timer(self):
 
@@ -434,11 +475,9 @@ class App(ctk.CTk):
 
     def update(self):
         
-        
         if not self.scheduler.get_jobs():
             self.tomorrow_prayers()
-            
-            
+
         self.jobs = self.scheduler.get_jobs()
         current_job = self.jobs[0]
 
@@ -451,7 +490,7 @@ class App(ctk.CTk):
         now = datetime.datetime.now(run_time.tzinfo)
 
         time_now = datetime.datetime.now()
-        if (time_now - self.last_checked).total_seconds() > 5:
+        if (time_now - self.last_checked).total_seconds() > 180:
             self.handle_sleep_resume()
 
         self.last_checked = time_now
