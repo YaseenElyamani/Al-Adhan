@@ -1,0 +1,7 @@
+customtkinter
+APScheduler
+pygame
+pystray
+Pillow
+requests
+urllib3

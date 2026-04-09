@@ -1,111 +1,65 @@
-import requests
-import time
 import datetime
+import requests
+
 PRAYERS = ["Fajr", "Dhuhr", "Asr", "Maghrib", "Isha"]
+
+REQUEST_TIMEOUT = 10  # seconds
+
+
+def _fetch_timings(url, params):
+    """
+    Internal helper. Calls the Aladhan API and returns a tuple of the five
+    prayer times in PRAYERS order. Raises requests.RequestException on
+    network/HTTP failures so callers can decide how to handle them.
+    """
+    response = requests.get(url, params=params, timeout=REQUEST_TIMEOUT)
+    response.raise_for_status()
+    timings = response.json()["data"]["timings"]
+    return tuple(timings[p] for p in PRAYERS)
+
+
+def _tomorrow_str():
+    return (datetime.datetime.now() + datetime.timedelta(days=1)).strftime("%d-%m-%Y")
 
 
 def get_prayer_times(city, country, method=2):
-    url = f"https://api.aladhan.com/v1/timingsByCity"
-    params = {
-        "city": city,
-        "country": country,
-        "method": method
-    }
-
-    response = requests.get(url, params=params)
-
-    if response.status_code == 200:
-        data = response.json()
-
-        fajr_time = data["data"]["timings"]["Fajr"]
-        dhuhr_time = data["data"]["timings"]["Dhuhr"]
-        asr_time = data["data"]["timings"]["Asr"]
-        maghrib_time = data["data"]["timings"]["Maghrib"]
-        isha_time = data["data"]["timings"]["Isha"]
-
-        return fajr_time, dhuhr_time, asr_time, maghrib_time, isha_time
-    else:
-        raise Exception(f"Non-success status code: {response.status_code}")
-    
-def get_tomrrow_prayer_times(city, country, method=2):
-    tomorrow = (datetime.datetime.now() + datetime.timedelta(days=1)).strftime("%d-%m-%Y")
-    url = f"https://api.aladhan.com/v1/timingsByCity"
-    params = {
-        "city": city,
-        "country": country,
-        "method": method,
-        "date": tomorrow
-    }
-
-    response = requests.get(url, params=params)
-
-    if response.status_code == 200:
-        data = response.json()
-
-        fajr_time = data["data"]["timings"]["Fajr"]
-        dhuhr_time = data["data"]["timings"]["Dhuhr"]
-        asr_time = data["data"]["timings"]["Asr"]
-        maghrib_time = data["data"]["timings"]["Maghrib"]
-        isha_time = data["data"]["timings"]["Isha"]
-
-        return fajr_time, dhuhr_time, asr_time, maghrib_time, isha_time
-    else:
-        raise Exception(f"Non-success status code: {response.status_code}")
-    
-def get_tomorrow_prayer_times_lat(lat, lon, method=2):
-    tomorrow = (datetime.datetime.now() + datetime.timedelta(days=1)).strftime("%d-%m-%Y")
-    url = "https://api.aladhan.com/v1/timings"
-    params = {
-        "latitude": lat,
-        "longitude": lon,
-        "method": method,
-        "date": tomorrow
-    }
-
-    response = requests.get(url, params=params)
-
-    if response.status_code == 200:
-        data = response.json()
-        fajr_time = data["data"]["timings"]["Fajr"]
-        dhuhr_time = data["data"]["timings"]["Dhuhr"]
-        asr_time = data["data"]["timings"]["Asr"]
-        maghrib_time = data["data"]["timings"]["Maghrib"]
-        isha_time = data["data"]["timings"]["Isha"]
-        return fajr_time, dhuhr_time, asr_time, maghrib_time, isha_time
-    else:
-        raise Exception(f"Non-success status code: {response.status_code}")
+    return _fetch_timings(
+        "https://api.aladhan.com/v1/timingsByCity",
+        {"city": city, "country": country, "method": method},
+    )
 
 
-    
+def get_tomorrow_prayer_times(city, country, method=2):
+    return _fetch_timings(
+        "https://api.aladhan.com/v1/timingsByCity",
+        {
+            "city": city,
+            "country": country,
+            "method": method,
+            "date": _tomorrow_str(),
+        },
+    )
+
+
 def get_prayer_times_lat(lat, lon, method=2):
-    url = f"https://api.aladhan.com/v1/timings"
-    params = {
-        "latitude": lat,
-        "longitude": lon,
-        "method": method
-    }
+    return _fetch_timings(
+        "https://api.aladhan.com/v1/timings",
+        {"latitude": lat, "longitude": lon, "method": method},
+    )
 
-    response = requests.get(url, params=params)
 
-    if response.status_code == 200:
-        data = response.json()
+def get_tomorrow_prayer_times_lat(lat, lon, method=2):
+    return _fetch_timings(
+        "https://api.aladhan.com/v1/timings",
+        {
+            "latitude": lat,
+            "longitude": lon,
+            "method": method,
+            "date": _tomorrow_str(),
+        },
+    )
 
-        fajr_time = data["data"]["timings"]["Fajr"]
-        dhuhr_time = data["data"]["timings"]["Dhuhr"]
-        asr_time = data["data"]["timings"]["Asr"]
-        maghrib_time = data["data"]["timings"]["Maghrib"]
-        isha_time = data["data"]["timings"]["Isha"]
 
-        return fajr_time, dhuhr_time, asr_time, maghrib_time, isha_time
-    else:
-        raise Exception(f"Non-success status code: {response.status_code}")
-    
-#Testing purposes only
-def print_athan(times):
-    print(f"Fajr Time: {times[0]}")
-    print(f"Dhuhr Time: {times[1]}")
-    print(f"Asr Time: {times[2]}")
-    print(f"Maghrib Time: {times[3]}")
-    print(f"Isha Time: {times[4]}")
-
-    return
+# Backwards-compatible alias for the old misspelled name, in case
+# anything still imports it. New code should use the corrected name.
+get_tomrrow_prayer_times = get_tomorrow_prayer_times

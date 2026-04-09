@@ -1,24 +1,33 @@
 # Python compiled files
 __pycache__/
 *.pyc
+*.pyo
 
 # Virtual environment folder
 venv/
 env/
+.venv/
 
 # OS files
 .DS_Store
 Thumbs.db
 
+# Editor / IDE
+.vscode/
+.idea/
+
 # Settings / credentials
 settings.json
 
-# PyInstaller / build output (if packaging)
+# Runtime logs
+*.log
+
+# PyInstaller / build output
 dist/
 build/
+*.spec
 *.exe
 
-main.spec
+# Personal scratch / experiments
 hello.py
-
 tkinter learn/
