@@ -39,16 +39,63 @@ def get_base_path():
 
 
 def resource_path(*parts):
-    """Build a path relative to the app's base directory."""
+    """
+    Build a path to a bundled read-only resource (images, audio, etc).
+
+    PyInstaller layouts to handle:
+    - Dev mode: files sit next to main.py
+    - --onefile: files are extracted to sys._MEIPASS at runtime
+    - --onedir (PyInstaller >= 6.0): files live in <exe_dir>/_internal/
+    - --onedir (PyInstaller < 6.0): files live next to the exe
+    """
+    # --onefile case
+    meipass = getattr(sys, "_MEIPASS", None)
+    if meipass:
+        candidate = os.path.join(meipass, *parts)
+        if os.path.exists(candidate):
+            return candidate
+
+    base = get_base_path()
+
+    # PyInstaller 6.x onedir: assets are in _internal/
+    internal = os.path.join(base, "_internal", *parts)
+    if os.path.exists(internal):
+        return internal
+
+    # Dev mode or older PyInstaller onedir
+    return os.path.join(base, *parts)
+
+
+def writable_path(*parts):
+    """
+    Path for files the app needs to write (settings, log).
+
+    When running as an installed exe (frozen), use %APPDATA%\\Al-Adhan\\ so
+    user data lives in the standard Windows location and survives uninstall/
+    reinstall. The exe itself can then live in a read-only location like
+    Program Files.
+
+    In dev mode, write next to main.py for convenience.
+    """
+    if getattr(sys, "frozen", False):
+        appdata = os.environ.get("APPDATA")
+        if appdata:
+            base = os.path.join(appdata, "Al-Adhan")
+        else:
+            # Fallback if APPDATA is somehow unset
+            base = os.path.join(os.path.expanduser("~"), "Al-Adhan")
+        os.makedirs(base, exist_ok=True)
+        return os.path.join(base, *parts)
+
     return os.path.join(get_base_path(), *parts)
 
 
 def get_settings_path():
-    return resource_path("settings.json")
+    return writable_path("settings.json")
 
 
 def get_log_path():
-    return resource_path("prayer_times.log")
+    return writable_path("prayer_times.log")
 
 
 # Configure file-based logging. We avoid print() because PyInstaller's
@@ -73,7 +120,7 @@ def add_to_startup():
         value = f'"{sys.executable}" "{script_path}"'
 
     reg_path = r"Software\Microsoft\Windows\CurrentVersion\Run"
-    name = "PrayerTimesApp"
+    name = "AlAdhan"
 
     try:
         registry_key = winreg.OpenKey(
@@ -94,7 +141,7 @@ _INSTANCE_MUTEX = None
 def single_instance():
     global _INSTANCE_MUTEX
     _INSTANCE_MUTEX = ctypes.windll.kernel32.CreateMutexW(
-        None, False, "Global\\PrayerTimesAppMutex"
+        None, False, "Global\\AlAdhanAppMutex"
     )
     if ctypes.windll.kernel32.GetLastError() == 183:
         sys.exit(0)
@@ -148,7 +195,7 @@ class App(ctk.CTk):
         self.check_startup()
 
         self.resizable(False, False)
-        self.title("Prayer Times")
+        self.title("Al-Adhan")
         try:
             self.iconbitmap(resource_path("images", "logo.ico"))
         except Exception as e:
@@ -165,13 +212,24 @@ class App(ctk.CTk):
         self.scheduler = BackgroundScheduler()
         self.last_checked = datetime.datetime.now()
         self.times = None
+        self.prayer_times_list = []
 
         self.load_settings()
         self.scheduler.start()
-        self.prayers_setup()
         self.setup_menu()
         self.draw_borders()
         self.label_grid()
+
+        # If we have no saved location, prompt for it before fetching prayer
+        # times. The popup is modal — execution blocks here until the user
+        # saves or closes it. If they leave it blank, prayers_setup() will
+        # fall back to IP-based geolocation.
+        if not self.city and not self.country:
+            self.open_settings(first_launch=True)
+            if hasattr(self, "_first_launch_settings"):
+                self.wait_window(self._first_launch_settings)
+
+        self.prayers_setup()
         self.scheduler_setup()
         self.timer()
 
@@ -223,11 +281,11 @@ class App(ctk.CTk):
             return
 
         self.tray_icon = pystray.Icon(
-            "PrayerTimes",
+            "AlAdhan",
             image,
-            "Prayer Times",
+            "Al-Adhan",
             menu=pystray.Menu(
-                pystray.MenuItem("Show", self.restore_from_tray),
+                pystray.MenuItem("Show", self.restore_from_tray, default=True),
                 pystray.MenuItem("Quit", self.quit_app),
             ),
         )
@@ -264,10 +322,10 @@ class App(ctk.CTk):
         file_menu.add_command(label="Quit", command=self.quit_app)
         menubar.add_cascade(label="File", menu=file_menu)
 
-    def open_settings(self):
+    def open_settings(self, first_launch=False):
         settings_window = ctk.CTkToplevel(self)
         settings_window.title("Settings")
-        settings_window.geometry("400x300")
+        settings_window.geometry("400x320")
         try:
             settings_window.iconbitmap(resource_path("images", "settings.ico"))
         except Exception:
@@ -278,10 +336,29 @@ class App(ctk.CTk):
         settings_window.lift()
         settings_window.focus_force()
 
-        location_label = ctk.CTkLabel(
-            settings_window, text="Location Settings", font=("Itim", 24, "bold")
+        # Stash a reference so __init__ can wait_window() on it during
+        # first launch. (CTkToplevel doesn't accept a name in constructor,
+        # so we attach it to self instead.)
+        if first_launch:
+            self._first_launch_settings = settings_window
+
+        header_text = (
+            "Welcome! Set your location"
+            if first_launch
+            else "Location Settings"
         )
-        location_label.pack(pady=(80, 0))
+        location_label = ctk.CTkLabel(
+            settings_window, text=header_text, font=("Itim", 22, "bold")
+        )
+        location_label.pack(pady=(40, 0))
+
+        if first_launch:
+            hint = ctk.CTkLabel(
+                settings_window,
+                text="Leave blank to auto-detect by IP.",
+                font=("IstokWeb", 12),
+            )
+            hint.pack(pady=(2, 10))
 
         location_frame = ctk.CTkFrame(settings_window)
         location_frame.pack(expand=True, padx=0, pady=0)
@@ -304,8 +381,8 @@ class App(ctk.CTk):
 
         def save_settings():
             data = {
-                "city": city_input.get(),
-                "country": country_input.get(),
+                "city": city_input.get().strip(),
+                "country": country_input.get().strip(),
                 "startup_added": True,
             }
             settings_path = get_settings_path()
@@ -317,8 +394,14 @@ class App(ctk.CTk):
 
             self.country = data["country"]
             self.city = data["city"]
-            self.prayers_setup()
-            self.restart_prayers()
+
+            # On first launch, the main __init__ flow will run prayers_setup
+            # right after this window closes — don't do it here. On a
+            # subsequent edit, we need to refetch and rebuild the schedule.
+            if not first_launch:
+                self.prayers_setup()
+                self.restart_prayers()
+
             settings_window.destroy()
 
         save_btn = ctk.CTkButton(settings_window, text="Save", command=save_settings)
